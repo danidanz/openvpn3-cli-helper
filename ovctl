@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ovctl <config> [-s|-p|-r|-d|-t|-k|-h]
+# Exit codes for -t: 0=connected, 10=paused, 20=not connected/unknown
+
+usage() {
+  cat <<USAGE
+Usage: ovctl <config> [-s|-p|-r|-d|-t|-k|-h]
+  -s  start         (openvpn3 session-start -c <config>)
+  -p  pause         (openvpn3 session-manage --config <config> --pause)
+  -r  resume        (openvpn3 session-manage --config <config> --resume)
+  -d  disconnect    (openvpn3 session-manage --config <config> --disconnect)
+  -t  status        (shows path/state/remote/IP; exit 0=connected, 10=paused, 20=down)
+  -k  kill all      (disconnect all sessions for <config> via session-paths)
+  -h  help
+USAGE
+}
+
+[[ $# -ge 1 ]] || { usage; exit 2; }
+CFG="$1"
+[[ $# -ge 2 ]] || { usage; exit 2; }
+FLAG="$2"
+
+# -------- helpers --------
+
+_get_blocks() {
+  local dump
+  dump="$(openvpn3 sessions-list 2>/dev/null || true)"
+  awk -v cfg="$CFG" '
+    BEGIN{blk=""}
+    NF==0 {
+      if (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg) { print blk "\n"; }
+      blk=""; next
+    }
+    { blk = blk $0 ORS }
+    END{
+      if (blk != "" && (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg)) {
+        print blk "\n";
+      }
+    }' <<<"$dump"
+}
+
+# Try multiple labels one-by-one; safe even with spaces
+_field_from_block() {
+  local block="$1"; shift
+  local label val
+  while [[ $# -gt 0 ]]; do
+    label="$1"; shift
+    # Match lines that start with the label then a colon
+    val="$(awk -F': ' -v lab="$label" 'index($0, lab":")==1 {print $2; exit}' <<<"$block")"
+    if [[ -n "${val:-}" ]]; then
+      printf "%s" "$val"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_status_probe_show() {
+  openvpn3 session-manage --config "$CFG" --show 2>/dev/null || true
+}
+
+status_cfg() {
+  local blocks block path state remote ip ec=20
+  blocks="$(_get_blocks)"
+  block="$(printf "%s" "$blocks" | awk 'BEGIN{RS="";ORS="";} {print; exit}')"
+
+  if [[ -z "${block// }" ]]; then
+    echo "$CFG: no active session."
+    return 20
+  fi
+
+  path="$(_field_from_block "$block" "Path" "Session path")" || true
+  state="$(_field_from_block "$block" "Status" "State")" || true
+  remote="$(_field_from_block "$block" "Remote" "Connected to")" || true
+  ip="$(_field_from_block "$block" "IPv4 address" "IPv4" "VPN IPv4")" || true
+
+  # Fallback probe if state missing/empty
+  local show
+  if [[ -z "${state:-}" ]]; then
+    show="$(_status_probe_show)"
+    state="$(awk -F': ' '/^(Status|State|Session state|Connection state):/ {print $2; exit}' <<<"$show")" || true
+    if [[ -z "${state:-}" ]]; then
+      if grep -qi 'paused' <<<"$show"; then
+        state="Paused"
+      elif grep -Eqi 'client connected|connected' <<<"$show"; then
+        state="Connected"
+      fi
+    fi
+    if [[ -z "${remote:-}" ]]; then
+      remote="$(awk -F': ' '/^(Remote|Connected to):/ {print $2; exit}' <<<"$show")" || true
+    fi
+  fi
+
+  echo "$CFG status"
+  [[ -n "${path:-}"   ]] && echo "  Session path : $path"
+
+  shopt -s nocasematch
+  if [[ -n "${state:-}" && "$state" == *paused* ]]; then
+    echo "  State        : Paused (VPN session suspended)"
+    ec=10
+  elif [[ -n "${state:-}" && "$state" == *connected* ]]; then
+    echo "  State        : ${state}"
+    ec=0
+  else
+    if [[ -n "${remote:-}" || -n "${ip:-}" ]]; then
+      echo "  State        : Connected (inferred)"
+      ec=0
+    else
+      echo "  State        : (unknown)"
+      ec=20
+    fi
+  fi
+  shopt -u nocasematch
+
+  [[ -n "${remote:-}" ]] && echo "  Remote       : $remote"
+  [[ -n "${ip:-}"     ]] && echo "  IP           : $ip"
+
+  return $ec
+}
+
+kill_all_cfg() {
+  local dump
+  dump="$(openvpn3 sessions-list 2>/dev/null || true)"
+
+  mapfile -t paths < <(awk -v cfg="$CFG" '
+    BEGIN{blk=""}
+    NF==0 {
+      if (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg) {
+        if (match(blk, /(Path|Session path):[[:space:]]*([^\n]+)/, m)) {
+          print m[2]
+        }
+      }
+      blk=""; next
+    }
+    { blk = blk $0 ORS }
+    END{
+      if (blk != "" && (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg)) {
+        if (match(blk, /(Path|Session path):[[:space:]]*([^\n]+)/, m)) {
+          print m[2]
+        }
+      }
+    }' <<<"$dump")
+
+  if [[ ${#paths[@]} -eq 0 ]]; then
+    echo "$CFG: no sessions to kill."
+    return 0
+  fi
+
+  printf "%s: killing %d session(s)...\n" "$CFG" "${#paths[@]}"
+  for sp in "${paths[@]}"; do
+    echo "  disconnecting $sp"
+    openvpn3 session-manage --session-path "$sp" --disconnect || true
+  done
+  echo "Done."
+}
+
+case "$FLAG" in
+  -s) exec openvpn3 session-start -c "$CFG" ;;
+  -p) exec openvpn3 session-manage --config "$CFG" --pause ;;
+  -r) exec openvpn3 session-manage --config "$CFG" --resume ;;
+  -d) exec openvpn3 session-manage --config "$CFG" --disconnect ;;
+  -t) status_cfg; exit $? ;;
+  -k) kill_all_cfg ;;
+  -h) usage ;;
+  *) usage; exit 2 ;;
+esac

@@ -1,0 +1,23 @@
+# Editors / IDEs
+.idea/
+.vscode/
+*.code-workspace
+
+# OS / editor temp files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+*.log
+
+# Node/JS (in case of tooling)
+node_modules/
+
+# Python venvs (if used for tooling)
+.venv/
+venv/
+
+# OpenVPN configs (do not commit secrets)
+*.ovpn
+
