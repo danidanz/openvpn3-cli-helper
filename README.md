@@ -23,18 +23,17 @@ Usage
   - `-h` help
 
 Examples
-- Status: `ovctl ovpn-dev.ovpn -t`
-- Start: `ovctl ovpn-dev.ovpn -s`
-- Pause/Resume: `ovctl ovpn-dev.ovpn -p` then `ovctl ovpn-dev.ovpn -r`
-- Disconnect: `ovctl ovpn-dev.ovpn -d`
-- Kill all sessions for config: `ovctl ovpn-dev.ovpn -k`
+- Status: `ovctl /path/to/myvpn.ovpn -t`
+- Start: `ovctl /path/to/myvpn.ovpn -s`
+- Pause/Resume: `ovctl /path/to/myvpn.ovpn -p` then `ovctl /path/to/myvpn.ovpn -r`
+- Disconnect: `ovctl /path/to/myvpn.ovpn -d`
+- Kill all sessions for config: `ovctl /path/to/myvpn.ovpn -k`
 
 Persistent Configs (OpenVPN 3)
 - Import as persistent (recommended):
-  - `openvpn3 config-import --persistent --name ovpn-live --path ovpn-live.ovpn`
-  - `openvpn3 config-import --persistent --name ovpn-dev  --path ovpn-dev.ovpn`
+  - `openvpn3 config-import --persistent --name myvpn --path /path/to/myvpn.ovpn`
 - List: `openvpn3 configs-list`
-- Remove: `openvpn3 config-remove --name ovpn-live`
+- Remove: `openvpn3 config-remove --name myvpn`
 
 Getting a .ovpn Profile
 - OpenVPN Access Server (recommended for teams):
@@ -63,8 +62,8 @@ Notes
 Development
 - Lint: `shellcheck ovctl` (should pass with no errors)
 - Manual smoke tests (require OpenVPN service):
-  - `./ovctl ovpn-dev.ovpn -s` then `./ovctl ovpn-dev.ovpn -t` → expect Connected/Paused/Unknown appropriately
-  - `./ovctl ovpn-dev.ovpn -k` → disconnects all sessions for that config
+  - `./ovctl /path/to/myvpn.ovpn -s` then `./ovctl /path/to/myvpn.ovpn -t` → expect Connected/Paused/Unknown appropriately
+  - `./ovctl /path/to/myvpn.ovpn -k` → disconnects all sessions for that config
 - Optional tests: add Bats tests under `tests/` by stubbing `openvpn3` outputs.
 
 Troubleshooting
