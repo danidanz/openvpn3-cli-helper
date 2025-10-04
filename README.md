@@ -36,6 +36,26 @@ Persistent Configs (OpenVPN 3)
 - List: `openvpn3 configs-list`
 - Remove: `openvpn3 config-remove --name ovpn-live`
 
+Getting a .ovpn Profile
+- OpenVPN Access Server (recommended for teams):
+  - Ask your admin to enable your account and (optionally) Autologin.
+  - Visit the Client Web UI: `https://<your-server>/` (or `/client/`), sign in, and download your profile (`.ovpn`). Choose Autologin or user-locked depending on policy.
+  - The downloaded `.ovpn` usually contains all certificates and keys inline; you can import it directly.
+- Community OpenVPN with Easy-RSA (self-hosted):
+  - On your PKI/CA host, create a client cert/key with Easy-RSA 3: generate request, sign as client.
+  - Build a client profile by combining your base client config with inline blocks:
+    - `<ca>...</ca>`, `<cert>...</cert>`, `<key>...</key>`, and if used `<tls-auth>` or `<tls-crypt>`.
+  - Typical assembly example: start from a `client-base.conf` (similar to `configs/sample.ovpn-sample`) and append the inline blocks to produce `name.ovpn`.
+- PiVPN (Raspberry Pi installer):
+  - Run `pivpn -a` to generate a client profile; fetch from `~/ovpns/<name>.ovpn`.
+- Commercial VPN providers:
+  - Most providers offer per-location `.ovpn` files in their dashboard or a ZIP bundle; download and import the relevant profile.
+
+Import and Verify
+- Import: `openvpn3 config-import --persistent --name myvpn --path /path/to/profile.ovpn`
+- List: `openvpn3 configs-list`
+- Test: `ovctl /path/to/profile.ovpn -t` or `ovctl myvpn -t` (if imported with a name)
+
 Notes
 - `ovctl` works with raw `.ovpn` paths or with names known to OpenVPN 3.
 - For active sessions, `openvpn3 sessions-list` is used; status parsing tolerates minor output variations.
@@ -57,4 +77,3 @@ Troubleshooting
 Security
 - Never commit real credentials, keys, or private endpoints.
 - Treat `.ovpn` files as samples only; redact sensitive data before sharing logs.
-
