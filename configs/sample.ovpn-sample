@@ -1,0 +1,47 @@
+# OpenVPN client config (sample)
+#
+# How to use:
+# 1) Copy to a safe location and rename to .ovpn
+#    e.g. cp configs/sample.ovpn-sample ~/vpn/dev.ovpn
+# 2) Fill in remote, auth, and certificates as needed
+# 3) NEVER commit real credentials or private keys
+
+client
+dev tun
+proto udp
+
+# Server to connect to (hostname/IP and port)
+remote vpn.example.com 1194
+
+# Connection behavior
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+
+# Authentication (choose one approach)
+# 1) Username/password file (two lines: username then password)
+# auth-user-pass /path/to/auth.txt
+#
+# 2) Certificate-based (uncomment and set absolute paths)
+# ca   /path/to/ca.crt
+# cert /path/to/client.crt
+# key  /path/to/client.key
+
+# Optional TLS keying (uncomment if used by your server)
+# tls-auth  /path/to/ta.key 1
+# tls-crypt /path/to/ta.key
+# key-direction 1
+
+# Crypto and logging
+cipher AES-256-GCM
+auth SHA256
+verb 3
+
+# UDP only: notify server on exit
+explicit-exit-notify 3
+
+# IPv6 support (optional)
+# tun-ipv6
+
