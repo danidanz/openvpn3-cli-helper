@@ -31,9 +31,13 @@ Examples
 
 Persistent Configs (OpenVPN 3)
 - Import as persistent (recommended):
-  - `openvpn3 config-import --persistent --name myvpn --path /path/to/myvpn.ovpn`
+  - `openvpn3 config-import --persistent --name myvpn -c /path/to/myvpn.ovpn`
 - List: `openvpn3 configs-list`
-- Remove: `openvpn3 config-remove --name myvpn`
+- Remove: `openvpn3 config-remove -c myvpn`
+- Note the flags: `config-import` takes `-c`/`--config <file>` and `-n`/`--name <name>`;
+  `config-remove` takes `-c`/`--config <name>` or `-o`/`--path <obj-path>`. The `--path`
+  and `--name` spellings are not valid on either subcommand and fail with
+  `unrecognized option`. Verified against OpenVPN 3 Linux v27.1.
 
 Getting a .ovpn Profile
 - OpenVPN Access Server (recommended for teams):
@@ -51,13 +55,15 @@ Getting a .ovpn Profile
   - Most providers offer per-location `.ovpn` files in their dashboard or a ZIP bundle; download and import the relevant profile.
 
 Import and Verify
-- Import: `openvpn3 config-import --persistent --name myvpn --path /path/to/profile.ovpn`
+- Import: `openvpn3 config-import --persistent --name myvpn -c /path/to/profile.ovpn`
 - List: `openvpn3 configs-list`
 - Test: `ovctl /path/to/profile.ovpn -t` or `ovctl myvpn -t` (if imported with a name)
 
 Notes
 - `ovctl` works with raw `.ovpn` paths or with names known to OpenVPN 3.
 - For active sessions, `openvpn3 sessions-list` is used; status parsing tolerates minor output variations.
+- Requires a POSIX/`mawk`-compatible `awk`. Ubuntu and Debian point `/usr/bin/awk` at
+  `mawk`, so `ovctl` avoids GNU-only `awk` extensions on purpose.
 
 Development
 - Lint: `shellcheck ovctl` (should pass with no errors)

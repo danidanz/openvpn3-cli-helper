@@ -57,10 +57,6 @@ _field_from_block() {
   return 1
 }
 
-_status_probe_show() {
-  openvpn3 session-manage --config "$CFG" --show 2>/dev/null || true
-}
-
 status_cfg() {
   local blocks block path state remote ip ec=20
   blocks="$(_get_blocks)"
@@ -75,23 +71,6 @@ status_cfg() {
   state="$(_field_from_block "$block" "Status" "State")" || true
   remote="$(_field_from_block "$block" "Remote" "Connected to")" || true
   ip="$(_field_from_block "$block" "IPv4 address" "IPv4" "VPN IPv4")" || true
-
-  # Fallback probe if state missing/empty
-  local show
-  if [[ -z "${state:-}" ]]; then
-    show="$(_status_probe_show)"
-    state="$(awk -F': ' '/^(Status|State|Session state|Connection state):/ {print $2; exit}' <<<"$show")" || true
-    if [[ -z "${state:-}" ]]; then
-      if grep -qi 'paused' <<<"$show"; then
-        state="Paused"
-      elif grep -Eqi 'client connected|connected' <<<"$show"; then
-        state="Connected"
-      fi
-    fi
-    if [[ -z "${remote:-}" ]]; then
-      remote="$(awk -F': ' '/^(Remote|Connected to):/ {print $2; exit}' <<<"$show")" || true
-    fi
-  fi
 
   echo "$CFG status"
   [[ -n "${path:-}"   ]] && echo "  Session path : $path"
@@ -124,23 +103,33 @@ kill_all_cfg() {
   local dump
   dump="$(openvpn3 sessions-list 2>/dev/null || true)"
 
+  # Portable awk only. Do NOT reintroduce gawk's 3-arg match(str, re, arr) here:
+  # Ubuntu/Debian ship mawk as /usr/bin/awk (via /etc/alternatives/awk), and mawk
+  # rejects that extension with "syntax error at or near ,", which silently
+  # reduces this function to a no-op ("no sessions to kill") on the distro most
+  # OpenVPN 3 users run. mawk's sub() also returns the substitution count rather
+  # than a found/not-found flag, so test the label with a regex first, then strip.
   mapfile -t paths < <(awk -v cfg="$CFG" '
-    BEGIN{blk=""}
-    NF==0 {
-      if (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg) {
-        if (match(blk, /(Path|Session path):[[:space:]]*([^\n]+)/, m)) {
-          print m[2]
+    function emit(block,   n, lines, i, line) {
+      n = split(block, lines, "\n")
+      for (i = 1; i <= n; i++) {
+        line = lines[i]
+        if (line ~ /^[[:space:]]*(Path|Session path):/) {
+          sub(/^[[:space:]]*/, "", line)
+          sub(/^(Path|Session path):[[:space:]]*/, "", line)
+          print line
+          return
         }
       }
+    }
+    BEGIN{blk=""}
+    NF==0 {
+      if (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg) { emit(blk) }
       blk=""; next
     }
     { blk = blk $0 ORS }
     END{
-      if (blk != "" && (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg)) {
-        if (match(blk, /(Path|Session path):[[:space:]]*([^\n]+)/, m)) {
-          print m[2]
-        }
-      }
+      if (blk != "" && (blk ~ ("Config name:[[:space:]]*" cfg) || blk ~ cfg)) { emit(blk) }
     }' <<<"$dump")
 
   if [[ ${#paths[@]} -eq 0 ]]; then
